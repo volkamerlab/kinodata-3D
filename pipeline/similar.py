@@ -1,3 +1,6 @@
+"""
+Apply `kinoml`'s `MostSimilarPDBLigandFeaturizer` to `kinodata` activities.
+"""
 from importlib import resources
 import sys
 import inspect
@@ -11,8 +14,6 @@ from kinoml.core.proteins import Protein, KLIFSKinase
 from kinoml.core.systems import ProteinLigandComplex
 from kinoml.features.complexes import (
     MostSimilarPDBLigandFeaturizer,
-    KLIFSConformationTemplatesFeaturizer,
-    OEDockingFeaturizer,
 )
 
 from rdkit import Chem
@@ -35,9 +36,8 @@ TEMP_DIR = CACHE_DIR / "temporary"
 DOCKING_DIR = CACHE_DIR / "docking"
 
 
-def get_system(args):
-    ident, uniprot_id, ligand_smiles = args
-    # try:
+def get_system(uniprot_id, ligand_smiles):
+    """Set up a kinoml protein-ligand komplex."""
     protein = Protein(uniprot_id=uniprot_id, toolkit="MDAnalysis")
     ligand = Ligand(smiles=ligand_smiles)
     system = ProteinLigandComplex(components=[protein, ligand])
@@ -45,38 +45,22 @@ def get_system(args):
     return system
 
 
-def get_most_similar(args):
-    featurizer = MostSimilarPDBLigandFeaturizer(
-        similarity_metric="fingerprint",
-        cache_dir=CACHE_DIR,
-    )
-
-    system = featurizer.featurize([system])[0]
-
-    ligand_id = system.protein.expo_id
-    pdb_id = system.protein.pdb_id
-    chain = system.protein.chain_id
-
-    return ligand_id, pdb_id, chain
-
-
 if __name__ == "__main__":
     kinodata = pd.read_csv("activity.csv", index_col=0)
-    done = pd.read_csv(MOST_SIMILAR)["activities.activity_id"].values
-    kinodata = kinodata[~kinodata["activities.activity_id"].isin(done)]
 
     print("Setting up kinoml systems")
     systems = list()
     for _, row in kinodata.iterrows():
         uniprot_id = row["UniprotID"]
         ligand_smiles = row["compound_structures.canonical_smiles"]
-        ident = row["activities.activity_id"]
-        systems.append(get_system((ident, uniprot_id, ligand_smiles)))
+        systems.append(get_system(uniprot_id, ligand_smiles))
 
     print("Finding most similar PDBs")
     CHUNKSIZE = 1
-    #   with open(MOST_SIMILAR, "w") as f:
-    #       f.write("activities.activity_id,similar.ligand_pdb,similar.complex_pdb,similar.chain\n")
+    with open(MOST_SIMILAR, "w") as f:
+        f.write(
+            "activities.activity_id,similar.ligand_pdb,similar.complex_pdb,similar.chain\n"
+        )
     featurized_systems = list()
     for i in tqdm.tqdm(range(0, len(systems), CHUNKSIZE)):
         try:
