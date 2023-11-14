@@ -9,7 +9,11 @@ import signal
 from kinoml.core.ligands import Ligand
 from kinoml.core.proteins import Protein, KLIFSKinase
 from kinoml.core.systems import ProteinLigandComplex
-from kinoml.features.complexes import MostSimilarPDBLigandFeaturizer, KLIFSConformationTemplatesFeaturizer, OEDockingFeaturizer
+from kinoml.features.complexes import (
+    MostSimilarPDBLigandFeaturizer,
+    KLIFSConformationTemplatesFeaturizer,
+    OEDockingFeaturizer,
+)
 
 from rdkit import Chem
 import pandas as pd
@@ -30,6 +34,7 @@ KLIFS_MAP = CACHE_DIR / "similar_klifs_structures.csv"
 TEMP_DIR = CACHE_DIR / "temporary"
 DOCKING_DIR = CACHE_DIR / "docking"
 
+
 def get_system(args):
     ident, uniprot_id, ligand_smiles = args
     protein = KLIFSKinase(uniprot_id=uniprot_id, toolkit="MDAnalysis")
@@ -38,13 +43,15 @@ def get_system(args):
 
     return system
 
-def output_file(ident):
-    return KLIFS_DIR / f'{ident}.csv'
 
-if __name__ == '__main__':
+def output_file(ident):
+    return KLIFS_DIR / f"{ident}.csv"
+
+
+if __name__ == "__main__":
     kinodata = pd.read_csv("activities-chembl31.csv", index_col=0)
 
-    print('Setting up kinoml systems')
+    print("Setting up kinoml systems")
     systems = list()
     done = list()
     for _, row in kinodata.iterrows():
@@ -55,32 +62,31 @@ if __name__ == '__main__':
         uniprot_id = row["UniprotID"]
         ligand_smiles = row["compound_structures.canonical_smiles"]
         systems.append(get_system((ident, uniprot_id, ligand_smiles)))
-    kinodata = kinodata[~kinodata['activities.activity_id'].isin(done)]
+    kinodata = kinodata[~kinodata["activities.activity_id"].isin(done)]
     assert len(kinodata) == len(systems), (len(kinodata), len(systems))
 
-
-    print('Finding most similar PDBs')
+    print("Finding most similar PDBs")
     CHUNKSIZE = 8
-#     with open(MOST_SIMILAR, "w") as f:
-#         f.write("activities.activity_id,similar.ligand_pdb,similar.complex_pdb,similar.chain\n")
+    #     with open(MOST_SIMILAR, "w") as f:
+    #         f.write("activities.activity_id,similar.ligand_pdb,similar.complex_pdb,similar.chain\n")
     featurized_systems = list()
     for i in tqdm.tqdm(range(0, len(systems), CHUNKSIZE)):
         try:
-            print('batch', i / CHUNKSIZE)
-            featurizer =KLIFSConformationTemplatesFeaturizer(
+            print("batch", i / CHUNKSIZE)
+            featurizer = KLIFSConformationTemplatesFeaturizer(
                 similarity_metric="fingerprint",
                 cache_dir=CACHE_DIR,
             )
-            featurized_systems = featurizer.featurize(systems[i:i+CHUNKSIZE])
-            idents = kinodata['activities.activity_id'].values[i:i+CHUNKSIZE]
+            featurized_systems = featurizer.featurize(systems[i : i + CHUNKSIZE])
+            idents = kinodata["activities.activity_id"].values[i : i + CHUNKSIZE]
         except:
-            print('batch', i, 'failed')
+            print("batch", i, "failed")
             continue
-        print(' writing results')
+        print(" writing results")
         for ident, system in zip(idents, featurized_systems):
-            #try:
+            # try:
             filename = output_file(ident)
-            print('result to', filename)
-            system.featurizations['last'].to_csv(filename)
-            #except:
+            print("result to", filename)
+            system.featurizations["last"].to_csv(filename)
+            # except:
             #    print('failed writing', KLIFS_DIR / f'{ident}.csv')

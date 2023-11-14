@@ -386,24 +386,24 @@ def prepare_tasks(
     for ident, row in data.similar_pdbs.iterrows():
         if structures is None or ident not in structures.index:
             continue
-      #     try:
-      #         structure_ID = get_klifs_structure_id(
-      #             row["similar.complex_pdb"],
-      #             {
-      #                 "chain": row["similar.chain"],
-      #                 "ligand": row["similar.ligand_pdb"],
-      #             },
-      #         )
-      #     except ValueError:
-      #         with open(output_dir / "klifs_failures.csv", "a") as f:
-      #             f.write(f"{ident},no klifs structure\n")
-      #         continue
-      #     except req.exceptions.HTTPError:
-      #         with open(output_dir / "klifs_failures.csv", "a") as f:
-      #             f.write(f"{ident},bad request\n")
-      #         continue
-      #     idents.append(ident)
-      #     ids.append(int(structure_ID))
+        #     try:
+        #         structure_ID = get_klifs_structure_id(
+        #             row["similar.complex_pdb"],
+        #             {
+        #                 "chain": row["similar.chain"],
+        #                 "ligand": row["similar.ligand_pdb"],
+        #             },
+        #         )
+        #     except ValueError:
+        #         with open(output_dir / "klifs_failures.csv", "a") as f:
+        #             f.write(f"{ident},no klifs structure\n")
+        #         continue
+        #     except req.exceptions.HTTPError:
+        #         with open(output_dir / "klifs_failures.csv", "a") as f:
+        #             f.write(f"{ident},bad request\n")
+        #         continue
+        #     idents.append(ident)
+        #     ids.append(int(structure_ID))
         else:
             structure_ID = int(structures.loc[ident, "similar.klifs_structure_id"])
         protein_file = get_klifs_protein(
@@ -498,6 +498,7 @@ def prepare_similar_klifs_tasks(data):
         ligand_smiles = row["compound_structures.canonical_smiles"]
         systems.append(SimilarKLIFSTask(ident, uniprot_id, ligand_smiles))
     return systems
+
 
 def main_similar_klifs():
     print("-> read data")
