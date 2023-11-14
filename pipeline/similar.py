@@ -1,30 +1,17 @@
 """
 Apply `kinoml`'s `MostSimilarPDBLigandFeaturizer` to `kinodata` activities.
 """
-from importlib import resources
-import sys
-import inspect
 from pathlib import Path
-import traceback
-import tempfile, os, shutil, time
-import signal
 
 from kinoml.core.ligands import Ligand
-from kinoml.core.proteins import Protein, KLIFSKinase
+from kinoml.core.proteins import Protein
 from kinoml.core.systems import ProteinLigandComplex
 from kinoml.features.complexes import (
     MostSimilarPDBLigandFeaturizer,
 )
 
-from rdkit import Chem
 import pandas as pd
-import requests as req
-from multiprocessing import Pool, cpu_count
 import tqdm
-import numpy as np
-import dask
-import dask.dataframe as dd
-import MDAnalysis as mda
 
 # directories
 HERE = Path(".").absolute()
