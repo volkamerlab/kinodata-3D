@@ -116,7 +116,7 @@ class SimilarKLIFSJob(Job):
                 "-n",
                 "kinoml",
                 "python",
-                "similar_klifs.py",
+                "run_docking.py",
                 str(self.ident),
                 str(self.uniprot_id),
                 str(self.smiles),
