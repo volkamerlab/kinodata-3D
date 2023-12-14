@@ -66,14 +66,14 @@ def klifs_pdb(
 
 
 if __name__ == "__main__":
-    cache_dir = Path(".").absolute() / "docking_pipeline"
+    cache_dir = Path(".").absolute() / "data"
     cache_dir.mkdir(exist_ok=True)
 
     print("read similar.csv")
     df = pd.read_csv(
-        cache_dir / "most_similar.csv",
+        cache_dir / "most_similar.csv.gz",
         index_col=0,
-        names="ident uniprot smiles pdb chain ligand_pdb".split(),
+        names="ident ligand_pdb pdb chain similarity fp_sim".split(),
     )
 
     BATCH_SIZE = 1024
@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
         print(batch_start, batch_end)
         print(f"get pdb batch {batch_num}/{batch_count}")
-        with open(f"pdbs.run2.csv", "a") as f:
+        with open(f"pdbs.csv", "a") as f:
             for idx, row in df[batch_start:batch_end].iterrows():
                 print(f"download {idx}")
                 try:
@@ -99,5 +99,5 @@ if __name__ == "__main__":
                     )
                     f.write(f"{idx},{filename}\n")
                 except Exception as e:
-                    with open("download_err.run2.csv", "a") as err:
+                    with open("download_err.csv", "a") as err:
                         err.write(f"{idx},{str(e)}\n")
