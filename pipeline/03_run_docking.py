@@ -299,7 +299,7 @@ def prepare_tasks(
     )
     print("-> populate waitlist")
     tasks, idents, ids = list(), list(), list()
-    for ident, row in data.similar_pdbs.iloc[:100].iterrows():
+    for ident, row in data.similar_pdbs.iterrows():
         if structures is None or ident not in structures.index:
             continue
         else:
