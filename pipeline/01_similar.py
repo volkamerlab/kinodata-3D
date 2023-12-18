@@ -9,23 +9,22 @@ from kinoml.core.systems import ProteinLigandComplex
 from kinoml.features.complexes import (
     MostSimilarPDBLigandFeaturizer,
 )
+from rdkit import Chem
 
 import pandas as pd
 import tqdm
 
 # directories
 HERE = Path(".").absolute()
-CACHE_DIR = HERE / "docking_pipeline"
-MOST_SIMILAR = CACHE_DIR / "most_similar.csv"
-KLIFS_DIR = CACHE_DIR / "KLIFS"
-KLIFS_MAP = CACHE_DIR / "similar_klifs_structures.csv"
-TEMP_DIR = CACHE_DIR / "temporary"
-DOCKING_DIR = CACHE_DIR / "docking"
+DATA_DIR = HERE / "data"
+MOST_SIMILAR = DATA_DIR / "most_similar.csv"
+CACHE_DIR = HERE / "cache"
 
 
 def get_system(uniprot_id, ligand_smiles):
     """Set up a kinoml protein-ligand komplex."""
     protein = Protein(uniprot_id=uniprot_id, toolkit="MDAnalysis")
+    ligand_smiles = Chem.MolToSmiles(Chem.MolFromSmiles(ligand_smiles))
     ligand = Ligand(smiles=ligand_smiles)
     system = ProteinLigandComplex(components=[protein, ligand])
 
@@ -33,7 +32,8 @@ def get_system(uniprot_id, ligand_smiles):
 
 
 if __name__ == "__main__":
-    kinodata = pd.read_csv("activity.csv", index_col=0)
+    CACHE_DIR.mkdir(exist_ok=True, parents=True)
+    kinodata = pd.read_csv(DATA_DIR / "activity.csv", index_col=False)
 
     print("Setting up kinoml systems")
     systems = list()
@@ -55,7 +55,6 @@ if __name__ == "__main__":
             featurizer = MostSimilarPDBLigandFeaturizer(
                 similarity_metric="fingerprint",
                 cache_dir=CACHE_DIR,
-                n_processes=CHUNKSIZE,
             )
             featurized_systems = featurizer.featurize(systems[i : i + CHUNKSIZE])
             idents = kinodata["activities.activity_id"].values[i : i + CHUNKSIZE]
@@ -70,4 +69,5 @@ if __name__ == "__main__":
                         ",".join(map(str, [ident, ligand_id, pdb_id, chain])) + "\n"
                     )
         except:
-            print("batch", i, "failed")
+            print(systems[i].ligand._smiles)
+            # print("batch", i, "failed")
