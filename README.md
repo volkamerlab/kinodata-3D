@@ -1,6 +1,7 @@
 # kinodata-3D
 
 The scripts in this repository can be used to perform template docking on the [kinodata](https://github.com/openkinome/kinodata) selection of kinase activity data mined from chembl.
+They were used for the generation of the [kinodata-3D dataset](https://chemrxiv.org/engage/chemrxiv/article-details/658441f7e9ebbb4db96d98e8).
 
 ## How the docking works
 
