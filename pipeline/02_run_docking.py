@@ -13,19 +13,21 @@ import signal
 import random
 from functools import cached_property
 from collections import namedtuple
+from pathlib import Path
+import tqdm
 
 import pandas as pd
 
 HERE = pathlib.Path(".").absolute()
+TEMPLATE_PATH = HERE / "data" / "templates"
 
 DockingTask = namedtuple("DockingTask", "ident protein smiles")
-SimilarKLIFSTask = namedtuple("SimilarKLIFSTask", "ident uniprot_id smiles")
 
 
 class Job:
     def __init__(self):
         self.start_time = time.time()
-        if not self.success:
+        if not self.success and not self.failed:
             self.start()
 
     def start(self):
@@ -39,8 +41,16 @@ class Job:
     def success(self):
         """
         This method is to be implemented by child classes.
-        It returns whether the job has already done (maybe previously).
+        It returns whether the job has already been done (maybe previously).
         The job is not started if `self.success == True` during initialization.
+        """
+        raise NotImplementedError("Subclass must implement")
+
+    @property
+    def failed(self):
+        """
+        This method is to be implemented by child classes.
+        It returns whether the job has already failed.
         """
         raise NotImplementedError("Subclass must implement")
 
@@ -53,11 +63,15 @@ class Job:
 
     @property
     def running(self):
+        if self.pid < 0:
+            return False
         return self.process.poll()
 
     @property
     def memory(self):
         """overall process tree's memory [gb]"""
+        if self.pid < 0:
+            return 0
         try:
             return sum(
                 child.memory_info().rss / 1024**3
@@ -72,7 +86,7 @@ class Job:
         return (time.time() - self.start_time) / 60
 
     def suicide(
-        self, sig=signal.SIGTERM, include_parent=True, timeout=None, on_terminate=None
+        self, sig=signal.SIGKILL, include_parent=True, timeout=None, on_terminate=None
     ):
         """Kill a process tree (including grandchildren) with signal
         "sig" and return a (gone, still_alive) tuple.
@@ -94,25 +108,23 @@ class Job:
                 p.send_signal(sig)
             except psutil.NoSuchProcess:
                 pass
-        gone, alive = psutil.wait_procs(
-            children, timeout=timeout, callback=on_terminate
-        )
-        return (gone, alive)
 
 
 class DockingJob(Job):
     def __init__(self, task):
         self.ident = task.ident
         self.protein_filepath = self.output_dir / "protein.pdb"
-        shutil.copy2(task.protein, self.protein_filepath)
         self.smiles = task.smiles
+        self.protein = task.protein
         # maybe the docking was done in a previous run
         super().__init__()
 
     def start(self):
+        # if self.protein_filepath.exists():
+        #    return
+        shutil.copy2(self.protein, self.protein_filepath)
         out = open(self.output_dir / "run.log", "w")
         err = open(self.output_dir / "run.err", "w")
-        print('run', self.ident)
         self.process = subprocess.Popen(
             [
                 "conda",
@@ -121,7 +133,7 @@ class DockingJob(Job):
                 "-n",
                 "kinodata-3D",
                 "python",
-                "pipeline/docking.py",
+                "docking.py",
                 str(self.ident),
                 str(self.protein_filepath),
                 str(self.smiles),
@@ -134,10 +146,17 @@ class DockingJob(Job):
         )
 
     @property
+    def in_progress(self):
+        return self.output_dir_name.exists()
+
+    @property
+    def output_dir_name(self):
+        return HERE / "data" / "cache" / "complexes" / str(self.ident)
+
+    @property
     def output_dir(self):
-        out_dir = HERE / "cache" / "complexes" / str(self.ident)
-        out_dir.mkdir(exist_ok=True, parents=True)
-        return out_dir
+        self.output_dir_name.mkdir(exist_ok=True, parents=True)
+        return self.output_dir_name
 
     @property
     def success(self):
@@ -146,6 +165,14 @@ class DockingJob(Job):
         ligand_file = self.output_dir / f"{self.ident}_ligand.pdb"
         success = output_file.exists() and ligand_file.exists()
         return success
+
+    @property
+    def failed(self):
+        return (self.output_dir / "fail").exists()
+
+    def fail(self, reason):
+        (self.output_dir / "fail").touch()
+        (self.output_dir / "fail").write_text(reason)
 
 
 class Scheduler:
@@ -157,7 +184,7 @@ class Scheduler:
         proc_mem_limit=10,
         timeout=10,
         total_mem_start_limit=50,
-        output_dir=HERE / "cache",
+        output_dir=HERE / "data" / "cache",
     ):
         """
         Parameters
@@ -184,21 +211,10 @@ class Scheduler:
         self.waitlist = tasks
         random.shuffle(self.waitlist)
         self.output_dir = output_dir
-        self.done = self.try_reading_done()
 
-    def try_reading_done(self):
-        done = []
-        if (self.success_file).exists():
-            done += list(
-                pd.read_csv(self.success_file, names=["ident"]).values.flatten()
-            )
-        if (self.failure_file).exists():
-            done += list(
-                pd.read_csv(self.failure_file, names="ident reason".split())[
-                    "ident"
-                ].values
-            )
-        return done
+    @property
+    def done(self):
+        return self.try_reading_done()
 
     @property
     def failure_file(self):
@@ -214,24 +230,24 @@ class Scheduler:
         )
 
     def run(self):
+        print("scheduler: start running")
         while len(self.waitlist) > 0 or len(self.running) > 0:
             self.print_status()
             time.sleep(1)  # busy wait...
             self.cleanup_running()
 
             # check overall memory usage
-            if psutil.virtual_memory().free / 1024 ** 3 <= self.total_mem_start_limit:
+            if psutil.virtual_memory().free / 1024**3 <= self.total_mem_start_limit:
                 continue
 
             self.start_dockings()
 
     def start_dockings(self):
+        print("start", self.capacity - len(self.running), "jobs")
         for _ in range(self.capacity - len(self.running)):
             if len(self.waitlist) == 0:
                 return
             task = self.waitlist.pop()
-            if task.ident in self.done:
-                continue
             self.running.append(self.jobtype(task))
 
     def log_fail(self, ident, reason):
@@ -253,17 +269,17 @@ class Scheduler:
                 continue
 
             if not job.running and not job.success and job.runtime > 10:
-                self.log_fail(job.ident, "death")
+                self.log_fail(job, "death")
                 job.suicide()
                 continue
 
             # check for timeout and out-of-memory
             if job.memory > self.proc_mem_limit:
-                self.log_fail(job.ident, "memory")
+                self.log_fail(job, "memory")
                 job.suicide()
                 continue
             if job.runtime > self.timeout:
-                self.log_fail(job.ident, "timeout")
+                self.log_fail(job, "timeout")
                 job.suicide()
                 continue
             still_running.append(i)
@@ -273,11 +289,11 @@ class Scheduler:
 class TemplateData:
     def __init__(
         self,
-        kinodata_path="data/activities-chembl31.csv.gz",
-        similar_pdb_path="data/most_similar.csv.gz",
+        kinodata_path="data/activities-chembl33.csv",
+        similar_structures_path="data/templates.csv.gz",
     ):
         self.kinodata_path = kinodata_path
-        self.similar_pdb_path = similar_pdb_path
+        self.similar_structures_path = similar_structures_path
 
     @cached_property
     def kinodata(self):
@@ -285,62 +301,81 @@ class TemplateData:
         return pd.read_csv(self.kinodata_path, index_col="activities.activity_id")
 
     @cached_property
-    def similar_pdbs(self):
-        # activities.activity_id,similar.ligand_pdb,similar.complex_pdb,similar.chain
-        return pd.read_csv(self.similar_pdb_path, index_col="activities.activity_id")
+    def similar_structures(self):
+        # activities.activity_id,similar.klifs_structure_id,similar.fp_similarity
+        return pd.read_csv(
+            self.similar_structures_path, index_col="activities.activity_id"
+        )
+
+    @cached_property
+    def data(self):
+        # activities.activity_id,similar.klifs_structure_id,similar.fp_similarity
+        return self.kinodata.join(
+            self.similar_structures[
+                ~self.similar_structures["similar.klifs_structure_id"] < 0
+            ],
+            how="inner",
+        )
 
 
-def prepare_tasks(
-    data: TemplateData, output_dir=HERE / "data"
-) -> List[DockingTask]:
-    klifs_structures_file = output_dir / "klifs_structures.csv.gz"
-    structures = pd.read_csv(
-        klifs_structures_file, index_col="activities.activity_id"
-    )
-    print("-> populate waitlist")
-    tasks, idents, ids = list(), list(), list()
-    for ident, row in data.similar_pdbs.iterrows():
-        if structures is None or ident not in structures.index:
-            continue
-        else:
-            structure_ID = int(structures.loc[ident, "similar.klifs_structure_id"])
-        protein_file = HERE / "cache" / f"{structure_ID}.pdb"
+def template_path(structure_id) -> Path:
+    TEMPLATE_PATH.mkdir(exist_ok=True)
+    return TEMPLATE_PATH / f"{structure_id}.pdb"
+
+
+def download_template(structure_id) -> Path:
+    filename = template_path(structure_id)
+    if not filename.exists():
+        resp = req.get(
+            "https://klifs.net/api_v2/structure_get_pdb_complex",
+            {"structure_ID": structure_id},
+        )
+        with open(filename, "w") as f:
+            f.write(resp.text)
+    return filename
+
+
+def download_templates(data: TemplateData):
+    print("Download docking templates")
+    for structure_id in tqdm.tqdm(data.data["similar.klifs_structure_id"]):
+        download_template(structure_id)
+
+
+def prepare_tasks(data, ident_range=(0, 1e10)) -> List[DockingTask]:
+    tasks = list()
+    for ident, row in tqdm.tqdm(data.data.iterrows(), total=len(data.data)):
         task = DockingTask(
             ident,
-            protein_file,
+            template_path(row["similar.klifs_structure_id"]),
             data.kinodata.loc[ident, "compound_structures.canonical_smiles"],
         )
+        print(ident)
         tasks.append(task)
-    structure_ids = pd.DataFrame(
-        {"activities.activity_id": idents, "similar.klifs_structure_id": ids}
-    ).set_index("activities.activity_id")
-    if structures is not None:
-        structure_ids = pd.concat([structure_ids, structures])
-
-    structure_ids.to_csv(klifs_structures_file)
-
+    print("task preparation done")
     return tasks
 
 
-def main_docking():
-    print("-> read data")
-    data = TemplateData()
-    print("-> prepare docking tasks")
+if __name__ == "__main__":
+    random.seed(int(time.time()))
+    data = TemplateData(
+        kinodata_path=HERE / "data" / "todo.csv",
+        similar_structures_path=HERE / "data" / "templates.csv",
+    )
+
+    download_templates(data)
+
     tasks = prepare_tasks(data)
 
+    print("task prep done")
+    output_dir = HERE / "data" / "poses"
+    output_dir.mkdir(exist_ok=True, parents=True)
+    print("init scheduler")
     scheduler = Scheduler(
         tasks,
         DockingJob,
         capacity=64,
-        proc_mem_limit=10,
-        timeout=10,
-        total_mem_start_limit=64,
-        output_dir=HERE / "cache",
+        output_dir=output_dir,
     )
 
     print("-> start docking")
     scheduler.run()
-
-
-if __name__ == "__main__":
-    main_docking()
