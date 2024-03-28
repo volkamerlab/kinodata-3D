@@ -14,23 +14,20 @@ It consists of three main steps:
 2. Performing template docking using that similar known complex as a basis (b).
 3. Filtering docked complexes according to their estimated docking quality (c).
 
-Steps 1 and 2 make heavy use of the [kinoml](http://github.com/openkinome/kinoml) framework.
+Step 2 makes use of the [kinoml](http://github.com/openkinome/kinoml) framework.
 
 Performing step 1 consists of running two scripts:
 1. Finding the empirical template and
 2. downloading the complex structure from [KLIFS](https://klifs.net).
-These steps are performed by the scripts `pipeline/01_similar.py` and `pipeline/02_klifs_pdb.py`, respectively.
-The latter step is necessary because we only use the ATP-pocket in the docking process and disregard the rest of the protein.
-This pocket, we can conveniently obtain using the KLIFS REST API.
+These steps are performed by the script `pipeline/klifs_template.py`.
+To call this script, download the latest kinase activities as curated by [kinodata](https://github.com/openkinome/kinodata/releases).
 
-The template docking is done using `pipeline/03_run_docking.py`. This script aims to set up a large number of system threads for docking.
-This way docking processes can fail for exceeding timeouts or memory limitations without crashing other docking tasks.
-Limits on time and memory can be set in this script.
-This scheduler calls the `pipeline/docking.py` script which contains the actual template docking steps.
+The template docking is done using `pipeline/docking.py`. For running the docking and monitoring timeouts as well as memory usage, we make use of HTCondor. The corresponding job is defined in `pipeline/docking.sub`.
 
 The final filtering of compounds is in fact mainly the annotation of docked complexes using a simple predictive model.
 This model takes analytical docking output, ie. the posit probability and the Chemgauss4 score, as well as the template similarity as inputs.
 It is trained using recent re-docking benchmark data by [Schaller et al](https://www.biorxiv.org/content/10.1101/2023.09.11.557138v1).
+The model and code can be found in `notebooks/rmsd_prediction.ipynb` and `notebooks/simple_nn_model.pth`, respectively.
 
 ## Setting up the environment
 

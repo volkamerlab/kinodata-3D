@@ -1,0 +1,18 @@
+universe = docker
+docker_image = michaback/docking:v5
+executable = run_docking.sh
+arguments = $(ident) $(klifs_id) $(smiles)
+output = output/$(ident)/log.out
+error = output/$(ident)/log.err
+log = docking.$(ClusterId).log
+periodic_remove = (HoldReasonCode == 2) || (HoldReasonCode == 34) || ((RemoteWallClockTime - CumulativeSuspensionTime) > 60 * 10)
+should_transfer_files   = YES
+request_GPUs = 0
+request_CPUs = 2
+request_memory = 10G
+requirements = UidDomain == "cs.uni-saarland.de" 
+max_materialize = 1000
+max_idle = 1000
++WantGPUHomeMounted = true
+
+queue ident, klifs_id, smiles from data/jobs.csv
