@@ -85,7 +85,9 @@ def get_template(kinase_ID, ligand_smiles):
     )
 
 
-def main(kinodata_file="../data/activities-chembl33_v0.5.csv", template_file='templates.csv'):
+def main(
+    kinodata_file="../data/activities-chembl33_v0.5.csv", template_file="templates.csv"
+):
     kinodata = pd.read_csv(kinodata_file, index_col=0)
 
     templates = pd.read_csv(template_file)
@@ -116,7 +118,6 @@ def main(kinodata_file="../data/activities-chembl33_v0.5.csv", template_file='te
                 continue
             f.write(f"{activity_id},{structure_ID[0]},{structure_ID[1]}\n")
             structure_IDs.append(structure_ID[0])
-
 
 
 if __name__ == "__main__":
