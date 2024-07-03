@@ -1,7 +1,5 @@
-from importlib import resources
-import inspect
 from pathlib import Path
-import time, sys, os, shutil, tempfile
+import time, sys, os, glob
 import socket
 
 from kinoml.core.ligands import Ligand
@@ -36,7 +34,7 @@ def main():
     system = ProteinLigandComplex(components=[protein, ligand])
 
     featurizer = OEDockingFeaturizer(
-        output_dir=output_dir, method="Posit", use_multiprocessing=False
+        output_dir=output_dir, method="Posit", use_multiprocessing=False, all_poses=True,
     )
     print("start featurization")
     start_time = time.time()
@@ -44,22 +42,23 @@ def main():
     duration = time.time() - start_time
 
     print("write result")
+
+    all_files = glob.glob(os.path.join(output_dir, '*'))
+    for file_path in all_files:
+        if not file_path.endswith('_ligand.sdf'):
+            os.remove(file_path)
+
     universe = system.featurizations["last"]
-    docking_score = universe._topology.docking_score
-    posit_probability = universe._topology.posit_probability
     with open(output_dir / "docking.csv", "a") as f:
         f.write(
             ",".join(
                 list(
-                    map(str, [activity_id, docking_score, posit_probability, duration])
+                    map(str, [activity_id, duration])
                 )
             )
             + "\n"
         )
 
-    print("write", output_dir / f"{activity_id}_complex.pdb")
-    with mda.coordinates.PDB.PDBWriter(output_dir / f"{activity_id}_ligand.pdb") as w:
-        w.write(universe.select_atoms("resname LIG"))
     print("done")
 
 
