@@ -1,5 +1,5 @@
 universe = docker
-docker_image = michaback/docking:v5
+docker_image = michaback/kinodata3d:v1
 executable = run_docking.sh
 arguments = $(ident) $(klifs_id) $(smiles)
 output = output/$(ident)/log.out
@@ -14,5 +14,6 @@ requirements = UidDomain == "cs.uni-saarland.de"
 max_materialize = 1000
 max_idle = 1000
 +WantGPUHomeMounted = true
++NoMonitoring = true
 
-queue ident, klifs_id, smiles from data/jobs.csv
+queue ident, klifs_id, smiles from ../data/jobs.csv

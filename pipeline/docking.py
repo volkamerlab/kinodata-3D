@@ -30,7 +30,7 @@ def main():
     output_dir = pathlib.Path(sys.argv[4])
 
     protein = Protein.from_file(pdb_filepath)
-    ligand = Ligand(smiles=smiles)
+    ligand = Ligand(smiles=smiles, name='')
     system = ProteinLigandComplex(components=[protein, ligand])
 
     featurizer = OEDockingFeaturizer(

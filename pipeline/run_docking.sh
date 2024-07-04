@@ -7,7 +7,7 @@ mkdir -p output/$1
 
 start_time=$(date +%s.%N)
 
-OE_LICENSE="./oe_license.txt" conda run --no-capture-output -n kinodata-3D python scripts/docking.py $1 data/templates/$2.pdb "$3" output/$1
+OE_LICENSE="./oe_license.txt" conda run --no-capture-output -n kinoml python pipeline/docking.py $1 data/templates/$2.pdb "$3" output/$1
 
 end_time=$(date +%s.%N)
 
